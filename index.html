@@ -94,6 +94,7 @@
                 width:300px;
                 display: inline-block;
                 vertical-align: top;
+                margin-top: 15px;
             }
             .extended .temperature, .extended .short{
                 display:inline-block;
@@ -136,8 +137,14 @@
                 border: 1px black dashed;
             }
             /*art*/
-            #art img{
+            .gallery-item img{
+                width:100%;
+            }
+            .gallery-item{
                 width:300px;
+                display:inline-block;
+                margin-right:15px;
+                vertical-align: top;
             }
         </style>
     </head>
@@ -157,11 +164,11 @@
         <hr class="dash">
         <h2 class="section-title">THE STREAM REPORT</h2>
         <div class="category" id="streams">
-            <h3 class="name">Nearby Streams</h3>
         </div>
         <hr class="dash">
         <h2 class="section-title">THE GALLERY</h2>
-        <div class="category" id="art"></div>
+        <div class="category" id="art">
+        </div>
         <hr class="dash">
         <h2 class="section-title">FUTURE WEATHER?</h2>
         <div class="category" id="extended-weather"></div>
@@ -210,7 +217,22 @@
                                 //load stream gauges
                                 loadGauges();
                                 //sunrise/sunset
-                                loadArt();
+                                //art
+                                fetch("data/art_test.csv")
+                                    .then(res => res.text())
+                                    .then(data => {
+                                        let ids = []; 
+                                        //parse csv
+                                        data = Papa.parse(data,{
+                                            header:true
+                                        }).data;
+                                        for (let i = 0; i <= 2; i ++){
+                                            let num = Math.floor(Math.random() * 4472)
+                                            ids[i] = Number(data[num]["Object ID"])
+                                        }
+                                        loadArt(ids);
+                                    })
+                                //books
                                 async function loadSunriseSunset() {
                                     let sun = await fetch("https://api.sunrise-sunset.org/v2?lat=" + coords.lat + "&lng=" + coords.lng)
                                     let sunData = await sun.json();
@@ -277,7 +299,7 @@
                                 async function loadGauges(){
                                     try {
                                         //clear streams
-                                        document.querySelector("#streams").innerHTML = "<h3 class='name'>Nearby Streams</h3>"
+                                        document.querySelector("#streams").innerHTML = ""
                                         //retrieve list of streamgauges within the defined bbox
                                         let gaugeList = await fetch("https://api.waterdata.usgs.gov/ogcapi/v0/collections/latest-daily/items?f=json&limit=10&api_key=zJFhvMC2GXFekpGdg4gSqZHCUFatO6KzjOz9k1LJ&statistic_id=00003&site_type=Stream&unit_of_measure=ft^3/s&bbox=" + bbox)
                                         let data = await gaugeList.json();
@@ -329,13 +351,23 @@
                                         console.log("Error")
                                     }
                                 }
-                                //get streamgauge
-                                async function loadArt(){
-                                    let art = await fetch("https://api.artic.edu/api/v1/artworks/search?query[term][is_public_domain]=true&limit=1&fields=id,title,image_id")
-                                    let data = await art.json();
-                                    let image_id = data.data[0].image_id, url = data.config.iiif_url, img = url + "/" + image_id + "/full/843,/0/default.jpg";
-                                    document.querySelector("#art").innerHTML = "<img src='" + img + "'>"
+                                //get art
+                                async function loadArt(ids){
+                                    console.log(ids)
+                                    ids.forEach(async function(id, i){
+                                        let art = await fetch("https://collectionapi.metmuseum.org/public/collection/v1/objects/" + id)
+                                        let artData = await art.json();
+                                        let desc = artData.title + " by " + artData.artistDisplayName + ", " + artData.objectBeginDate +"-"+artData.objectEndDate
+                                        document.querySelector("#art").innerHTML += "<div class='gallery-item'><img id='art_" + i +"' src='" + artData.primaryImageSmall +"'><p>" + desc +"</p></div>"
+                                    })
                                 }
+                                //get books
+                                /*async function loadBooks(){
+                                    let num = Math.floor(Math.random() * 79335)
+                                    let book = await fetch("https://gutendex.com/books/?ids=" + num)
+                                    let bookData = await book.json();
+                                    console.log(bookData)
+                                }*/
                             }, 100);
                         }
                     })
