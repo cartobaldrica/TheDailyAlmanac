@@ -1,0 +1,350 @@
+
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width">
+            <title>Daily Almanac</title>
+
+        <link rel="stylesheet" href="lib/leaflet.css">
+        <style>
+            @font-face {
+                font-family: karrik; /* set name */
+                src: url(css/Karrik-Regular.woff2); /* url of the font */
+            }
+            @font-face {
+                font-family: karrik; /* set name */
+                src: url(css/Karrik-Italic.woff2); /* url of the font */
+                font-style: italic;
+            }
+            /*universal styles*/
+            body{
+                width:100vw;
+                font-family: karrik;
+            }            
+            h1,h3{
+                margin-bottom:0;
+                margin-top:0;
+            }
+            button,input{
+                font-family: karrik;
+            }
+            #title-block{
+                font-size:50px;
+                margin-bottom:10px;
+            }
+            #title-block h1{
+                display:inline-block;
+                line-height: 75px;
+            }
+            #title-block p{
+                display:inline-block;
+                font-size:24px;
+                line-height:25px;
+                margin:0px;
+            }
+            .name{
+                font-style: italic;
+                margin:30px 0 5px;
+            }
+            .section-title{
+                margin-bottom:10px;
+            }
+            /*sun*/
+            #sun, #moon{
+                margin-top:25px;
+                font-size:24px;
+                width:300px;
+                display:inline-block;
+                margin-right:15px;
+                vertical-align: top;
+            }
+            #sun i{
+                text-align:center;
+            }
+            #moon-icon{
+                font-size:24px;
+                color:black;
+                display:inline-block;
+            }
+            /*weather*/
+            #weather div {
+                display: inline-block;
+                margin-right:15px;
+                vertical-align: top;
+            }
+            .temperature, .short{
+                display:inline-block;
+            }
+            .temperature{
+                font-size:64px;
+            }
+            .short{
+                font-size:20px;
+                max-width:300px;
+            }
+            .name{
+                margin-top:0;
+            }   
+            .precip,.wind{
+                font-weight:normal;
+                font-size:20px;
+            }
+            #extended-weather div {
+                width:300px;
+                display: inline-block;
+                vertical-align: top;
+            }
+            .extended .temperature, .extended .short{
+                display:inline-block;
+            }
+            .extended .temperature{
+                font-size:20px;
+            }
+            .extended .short{
+                font-size:20px;
+            }   
+            /*stream*/
+            #streams, #extended-weather{
+                max-width:950px;
+            }
+            .stream{
+                margin-bottom:15px;
+                /*border: 1px black dashed;*/
+                width:300px;
+                display:inline-block;
+                margin-right:15px;
+                vertical-align: top;
+            }
+            .gauge{
+                font-size:24px;
+            }
+            .stream-name{
+                font-size:16px;
+                font-weight:normal;
+            }
+            /*attribution*/
+            .info{
+                margin-top:25px;
+                margin-bottom:25px;
+            }
+            .info p{
+                margin:0;
+            }
+            /*style*/
+            .dash{
+                border: 1px black dashed;
+            }
+            /*art*/
+            #art img{
+                width:300px;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="title-block">
+            <h1>the daily almanac</h1><p>what's going on?</p>
+            <hr>
+        </div>
+        <div class="category" id="search-container">
+            <input id="search" type="text" placeholder="Search.."> 
+            <button id="geocode">Search</button>
+        </div>
+        <h2 class="section-title">THE WEATHER REPORT</h2>
+        <div class="category" id="weather"></div>
+        <div class="category" id="sun"></div>
+        <div class="category" id="moon"></div>
+        <hr class="dash">
+        <h2 class="section-title">THE STREAM REPORT</h2>
+        <div class="category" id="streams">
+            <h3 class="name">Nearby Streams</h3>
+        </div>
+        <hr class="dash">
+        <h2 class="section-title">THE GALLERY</h2>
+        <div class="category" id="art"></div>
+        <hr class="dash">
+        <h2 class="section-title">FUTURE WEATHER?</h2>
+        <div class="category" id="extended-weather"></div>
+        <hr class="dash">
+        <div class="info">
+            <p>Weather data are from the United States National Weather Service.</p>
+            <p>Sunrise, Sunset, and Moonrise data are from <a href="https://sunrise-sunset.org">sunrise-sunset.org</a>.</p>
+            <p>Streamgauge data are from the United States Geological Survey.</p>
+            <p>Typeface is Karrik, created by Jean-Baptiste Morizot, Lucas Le Biha and acquired through <a href="https://velvetyne.fr/download/?font=karrik">velvetyne</a></p>
+        </div>
+
+        <script type="text/javascript" src="lib/leaflet.js"></script>
+        <script type="text/javascript" src="lib/leaflet-knn.min.js"></script>
+        <script type="text/javascript" src="lib/papaparse.min.js"></script>
+        <script type="text/javascript" src="lib/Control.Geocoder.js"></script>
+        <script>
+            //load nomanitim geocoding server
+            let nominatim = new L.Control.Geocoder.Nominatim()
+            //get cache
+            if (localStorage['location'])
+                runSearch(localStorage['location']);
+            //set listener
+            document.querySelector("#geocode").addEventListener("click",function(){
+                runSearch(document.querySelector("#search").value)
+            })
+            //distance factor
+            let distance = 0.5;
+            async function runSearch(search){
+                document.querySelectorAll(".weather").forEach(function(elem){
+                    elem.innerHTML = "";
+                })
+                localStorage['location'] = search; // only strings
+                await nominatim.geocode(search)
+                    .then(function(data){
+                        //add item to results if result exists
+                        if (data[0]){
+                            //set delay for 1 second to comply with public server limits
+                            setTimeout(() => {
+                                //get coordinates based on results
+                                let coords = data[0].center,
+                                    bbox = (coords.lng - distance) + "," + (coords.lat - distance) + "," + (coords.lng + distance) + "," + (coords.lat + distance)
+                                //load weather
+                                loadWeatherPoint();
+                                //load sunrise/sunset
+                                loadSunriseSunset()
+                                //load stream gauges
+                                loadGauges();
+                                //sunrise/sunset
+                                loadArt();
+                                async function loadSunriseSunset() {
+                                    let sun = await fetch("https://api.sunrise-sunset.org/v2?lat=" + coords.lat + "&lng=" + coords.lng)
+                                    let sunData = await sun.json();
+
+                                    let sunrise = new Date(sunData.sunrise), sunriseHour = sunrise.getHours(), sunriseMin = sunrise.getMinutes() < 10 ? "0" + String(sunrise.getMinutes()): sunrise.getMinutes(),
+                                        sunset = new Date(sunData.sunset), sunsetHour = sunset.getHours(), sunsetMin = sunset.getMinutes() < 10 ? "0" + String(sunset.getMinutes()): sunset.getMinutes();
+
+                                    document.querySelector("#sun").innerHTML = "<i>&#9788 </i>Sunrise: <b>" + sunriseHour + ":" + sunriseMin + "</b></br>" + "<i>&#9790 </i>Sunset: <b>" + sunsetHour + ":" + sunsetMin + "</b>";
+                                
+                                    let moon_phase = sunData.moon_phase
+
+                                    let icon = moon_phase == 'New Moon' ? '&#9675': moon_phase == 'Full Moon' ? '&#9679': moon_phase == 'Waxing Gibbous' ? '&#9789': moon_phase == 'Waning Gibbous' ? '&#9790': '&#9679' ;
+                                    document.querySelector("#moon").innerHTML = "<b id='moon-icon'>" + icon + "</b>Moon: <b>" + moon_phase + "</b>";
+                                }
+                                 //get weather
+                                 async function loadWeatherPoint() {
+                                    try {
+                                        //get nearest weather station for selected point
+                                        let point = await fetch("https://api.weather.gov/points/" + coords.lat + "," + coords.lng + "")
+                                        let data = await point.json();
+                                        //load weather based on point
+                                        loadWeather(data.properties.forecast)
+                                    }
+                                    catch (error) {
+                                        console.log("Error")
+                                    }
+                                }
+                                async function loadWeather(gridPoint) {
+                                    try {
+                                        let weather = await fetch(gridPoint)
+                                        let data = await weather.json();
+                                        //clear weather
+                                        document.querySelector("#weather").innerHTML = ""
+                                        document.querySelector("#extended-weather").innerHTML = ""
+                                        //create weather report
+                                        for (let i = 0; i < 10; i++){
+                                            let id = "weather-" + i;
+                                            let firstHalfForecast =  data.properties.periods[i].shortForecast.includes("then") ? data.properties.periods[i].shortForecast.split("then")[0] : data.properties.periods[i].shortForecast,
+                                                secondHalfForecast =  data.properties.periods[i].shortForecast.includes("then") ? data.properties.periods[i].shortForecast.split("then")[1] : ""
+                                            let weatherIcon = firstHalfForecast.includes("Thunderstorm") ? "&#9928" : firstHalfForecast.includes("Showers") ? "&#9926" : firstHalfForecast.includes("Sunny") || firstHalfForecast.includes("Hot") ? "&#9728" : firstHalfForecast.includes("Cloudy") ? "&#9729" : firstHalfForecast.includes("Snowy") || firstHalfForecast.includes("Cold") ? "&#10052" : "&#9730";
+                                                secondHalfWeatherIcon = secondHalfForecast.includes("Thunderstorm") ? "&#9928" : secondHalfForecast.includes("Showers") ? "&#9926" : secondHalfForecast.includes("Sunny") || secondHalfForecast.includes("Hot") ? "&#9728" : secondHalfForecast.includes("Cloudy") ? "&#9729" : secondHalfForecast.includes("Snowy") || secondHalfForecast.includes("Cold") ? "&#10052" : "";
+                                            if (i < 2){
+                                                document.querySelector("#weather").insertAdjacentHTML('beforeend',"<div id='"+ id + "'></div>")
+                                                document.querySelector("#" + id).innerHTML += "<h3 class='name'>" + data.properties.periods[i].name + "</h3>";
+                                                document.querySelector("#" + id).innerHTML += "<h1 class='temperature'>" + data.properties.periods[i].temperature + "° " + weatherIcon + " " + secondHalfWeatherIcon + "</h1><br/>";
+                                                document.querySelector("#" + id).innerHTML += "<h3 class='short'>" + data.properties.periods[i].shortForecast + "</h3>";
+                                                document.querySelector("#" + id).innerHTML += "<h3 class='precip'>" + data.properties.periods[i].probabilityOfPrecipitation.value + "% Chance of Precipitation</h3>";
+                                                document.querySelector("#" + id).innerHTML += "<h3 class='wind'>Wind " + data.properties.periods[i].windSpeed + " " + data.properties.periods[0].windDirection + "</h3>";
+                                            }
+                                            else{
+                                                document.querySelector("#extended-weather").insertAdjacentHTML('beforeend',"<div id='"+ id + "' class='extended'></div>")
+                                                document.querySelector("#" + id).innerHTML += "<h3 class='name'>" + data.properties.periods[i].name + "</h3>";
+                                                document.querySelector("#" + id).innerHTML += "<h1 class='temperature'>" + data.properties.periods[i].temperature + "° " + weatherIcon + " " + secondHalfWeatherIcon + "</h1><br/>";
+                                                document.querySelector("#" + id).innerHTML += "<h3 class='short'>" + data.properties.periods[i].shortForecast + "</h3></h1>";
+                                                document.querySelector("#" + id).innerHTML += "<h3 class='precip'>" + data.properties.periods[i].probabilityOfPrecipitation.value + "% Precip.</h3>";
+                                            }
+                                        }
+                                    }
+                                    catch (error) {
+                                        console.log("Error")
+                                    }
+                                }
+                                //get streamgauge
+                                async function loadGauges(){
+                                    try {
+                                        //clear streams
+                                        document.querySelector("#streams").innerHTML = "<h3 class='name'>Nearby Streams</h3>"
+                                        //retrieve list of streamgauges within the defined bbox
+                                        let gaugeList = await fetch("https://api.waterdata.usgs.gov/ogcapi/v0/collections/latest-daily/items?f=json&limit=10&api_key=zJFhvMC2GXFekpGdg4gSqZHCUFatO6KzjOz9k1LJ&statistic_id=00003&site_type=Stream&unit_of_measure=ft^3/s&bbox=" + bbox)
+                                        let data = await gaugeList.json();
+                                        //convert data into geojson
+                                        let gauges = L.geoJson(data)
+                                        //get nearest five gauges to the point
+                                        var nearest = leafletKnn(gauges).nearest(L.latLng(coords.lat, coords.lng), 5);
+                                        //create list of 5 gauges
+                                        let locs = "", loc_ids = ""; 
+                                        nearest.forEach(function(g,i){
+                                            if (i == (nearest.length - 1)){
+                                                locs += g.layer.feature.properties.monitoring_location_id.slice(5)
+                                                loc_ids += "monitoring_location_id=" + g.layer.feature.properties.monitoring_location_id + "&"
+                                            }
+                                            else{
+                                                locs += g.layer.feature.properties.monitoring_location_id.slice(5) + ","
+                                                loc_ids += "monitoring_location_id=" + g.layer.feature.properties.monitoring_location_id + "&"
+                                            }
+                                        })
+                                        //get gauge metadata
+                                        let selectedGauges = await fetch("https://api.waterdata.usgs.gov/ogcapi/v0/collections/monitoring-locations/items?f=json&limit=5&api_key=zJFhvMC2GXFekpGdg4gSqZHCUFatO6KzjOz9k1LJ&monitoring_location_number=" + locs)
+                                        let newGaugeData = await selectedGauges.json();
+                                        //get day of year average for gauge
+                                        let date = new Date(),
+                                            currentDate = date.toISOString().slice(5,10)
+                                        
+                                        let gaugeAverages = await fetch("https://api.waterdata.usgs.gov/statistics/v0/observationNormals?start_date=" + currentDate + "&end_date=" + currentDate + "&mime_type=application%2Fjson&computation_type=arithmetic_mean&parameter_code=00060&" + loc_ids + "&page_size=5")
+                                        let gaugeAverageData = await gaugeAverages.json();
+                                        //iterate through streamgauges to combine with metadata and averages
+                                        nearest.forEach(function(g,i){
+                                            newGaugeData.features.forEach(function(f){
+                                                if (f.properties.id == g.layer.feature.properties.monitoring_location_id){
+                                                    Object.assign(g.layer.feature.properties,f.properties)
+                                                }
+                                            })
+                                            gaugeAverageData.features.forEach(function(f){
+                                                if (f.properties.monitoring_location_id == g.layer.feature.properties.monitoring_location_id){
+                                                    g.layer.feature.properties["mean"] = f.properties.data[0].values[0].value;
+                                                    let compare = g.layer.feature.properties["mean"] * 0.25
+                                                    g.layer.feature.properties["mean_text"] = (g.layer.feature.properties.value < g.layer.feature.properties["mean"] + compare) &&  (g.layer.feature.properties.value > g.layer.feature.properties["mean"] - compare) ? "near" : g.layer.feature.properties.value < g.layer.feature.properties["mean"] - compare ? "below" : g.layer.feature.properties.value > g.layer.feature.properties["mean"] + compare ? "above": "no";
+                                                    console.log(g.layer.feature.properties["mean_text"])
+                                                }
+                                            })
+                                            //add to HTML
+                                            document.querySelector("#streams").innerHTML += "<div class='stream'><h3 class='stream-name'>" + g.layer.feature.properties.monitoring_location_name + "<br></h3><h3 class='" + g.layer.feature.properties["mean_text"] + " gauge'>" + g.layer.feature.properties.value + " ft3/s (" + g.layer.feature.properties["mean_text"] + " average</b>)</h3></div>"
+                                        })
+                                    }
+                                    catch (error) {
+                                        console.log("Error")
+                                    }
+                                }
+                                //get streamgauge
+                                async function loadArt(){
+                                    let art = await fetch("https://api.artic.edu/api/v1/artworks/search?query[term][is_public_domain]=true&limit=1&fields=id,title,image_id")
+                                    let data = await art.json();
+                                    let image_id = data.data[0].image_id, url = data.config.iiif_url, img = url + "/" + image_id + "/full/843,/0/default.jpg";
+                                    document.querySelector("#art").innerHTML = "<img src='" + img + "'>"
+                                }
+                            }, 100);
+                        }
+                    })
+                    .catch(function(){
+                        //if no result, post feature name with undefined values
+                        console.log("No Data")
+                    })
+            }
+
+    </script>
+    </body>
+</html>
